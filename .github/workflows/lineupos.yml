@@ -1,0 +1,40 @@
+.name: LineUpOS CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    container:
+      image: alpine:edge
+      env:
+        CC: clang
+        CXX: clang++
+        RUSTUP_TOOLCHAIN: stable
+        DOTNET_VERSION: 9.0
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-action@v3
+
+      - name: Build LineUpOS Docker image
+        run: |
+          docker build -t lineupos-builder -f toolchain/Dockerfile.builder .
+          docker run --rm -v "\${PWD}:/src" lineupos-builder /src/build.sh docker-build
+
+      - name: Verify ISO
+        run: |
+          ls -l iso/lineupos-*.iso
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: lineupos-iso
+          path: iso/lineupos-*.iso

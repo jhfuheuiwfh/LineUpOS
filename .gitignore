@@ -1,0 +1,79 @@
+# LineUpOS Build Artifacts
+build/
+iso/
+
+# Build outputs
+*.iso
+*.xz
+*.bzImage
+*.ko
+*.o
+*.obj
+*.exe
+*.dll
+*.pdb
+*.ilk
+*.exp
+*.lib
+
+# IDE and editor artifacts
+.vscode/
+.idea/
+*.suo
+*.user
+*.nupkg
+*.snk
+
+# .NET
+bin/
+obj/
+*.csproj.user
+publish/
+
+# Node.js
+node_modules/
+package-lock.json
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.venv/
+venv/
+.env
+
+# Rust
+target/
+Cargo.lock
+
+# OS generated
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# Logs
+*.log
+npm-debug.log*
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.orig
+
+# LineUpOS specific runtime artifacts
+/run/lineupos/
+/var/log/messages
+
+# ISO outputs
+*.img
+*.img.partial
+
+# Cache
+.cache/
+.vscode-test/

@@ -1,0 +1,49 @@
+[package]
+name = "lineupos-kmods"
+version = "0.1.0"
+edition = "2021"
+description = "LineUpOS Kernel Modules - Memory safe Rust drivers"
+
+[workspace]
+members = [
+    "lineupos-core",
+    "lineupos-net",
+    "lineupos-fs",
+    "lineupos-ipc",
+    "lineupos-gpu",
+    "lineupos-ai-mem",
+]
+
+[profile.release]
+opt-level = "z"
+lto = true
+panic = "abort"
+codegen-units = 1
+strip = true
+debug = false
+
+[profile.dev]
+opt-level = 0
+debug = true
+overflow-checks = true
+
+[target.x86_64-unknown-linux-gnu]
+rustflags = [
+    "-C", "link-arg=-nostdlib",
+    "-C", "link-arg=-static",
+    "-C", "link-arg=-Wl,--gc-sections",
+    "-C", "target-feature=+crt-static",
+]
+
+# Kernel crate (from linux source tree)
+# This is a placeholder - actual kernel crate comes from kernel source
+[dependencies]
+# kernel = { path = "../../../linux/rust/kernel" }  # Set via build script
+alloc = { version = "1", features = ["global"] }
+core = "1"
+compiler_builtins = { version = "0.1", features = ["mem"] }
+
+# Bindgen for kernel headers
+[build-dependencies]
+bindgen = "0.68"
+cc = "1.0"

@@ -1,0 +1,105 @@
+#!/bin/busybox sh
+# LineUpOS Init - PID 1
+# Monta filesystems essenciais, carrega módulos, passa para userspace
+
+export PATH=/bin:/sbin:/usr/bin:/usr/sbin
+
+# Early setup
+mount -t proc proc /proc
+mount -t sysfs sysfs /sys
+mount -t devtmpfs devtmpfs /dev
+mkdir -p /run /tmp /var/log /var/cache
+
+# Log early
+echo "[LineUpOS Init] Starting..." > /dev/kmsg
+
+# Parse kernel command line
+AI_MEM=""
+for param in $(cat /proc/cmdline); do
+    case $param in
+        lineupos_ai_mem=*) AI_MEM="${param#*=}" ;;
+        lineupos_debug) export LINEUPOS_DEBUG=1 ;;
+    esac
+done
+
+# Load kernel modules (Rust + C)
+echo "[LineUpOS Init] Loading kernel modules..." > /dev/kmsg
+for mod in /lib/modules/*.ko; do
+    [ -f "$mod" ] && {
+        modname=$(basename "$mod" .ko)
+        insmod "$mod" 2>/dev/null && echo "[LineUpOS Init] Loaded $modname" > /dev/kmsg
+    }
+done
+
+# Detect GPU and load driver
+echo "[LineUpOS Init] Detecting GPU..." > /dev/kmsg
+if lspci 2>/dev/null | grep -qi "vga.*amd"; then
+    echo "[LineUpOS Init] AMD GPU detected, loading amdgpu..." > /dev/kmsg
+    modprobe amdgpu 2>/dev/null || true
+    modprobe drm 2>/dev/null || true
+    modprobe drm_kms_helper 2>/dev/null || true
+elif lspci 2>/dev/null | grep -qi "vga.*nvidia"; then
+    echo "[LineUpOS Init] NVIDIA GPU detected, loading nvidia..." > /dev/kmsg
+    modprobe nvidia 2>/dev/null || true
+    modprobe nvidia_modeset 2>/dev/null || true
+    modprobe nvidia_uvm 2>/dev/null || true
+    modprobe nvidia_drm 2>/dev/null || true
+elif lspci 2>/dev/null | grep -qi "vga.*intel"; then
+    echo "[LineUpOS Init] Intel GPU detected, loading i915..." > /dev/kmsg
+    modprobe i915 2>/dev/null || true
+fi
+
+# Load DMA-BUF and sync framework
+modprobe dma-buf 2>/dev/null || true
+modprobe sync_file 2>/dev/null || true
+
+# Reserve AI memory (732MB via CMA)
+if [ -n "$AI_MEM" ]; then
+    AI_MB=${AI_MEM%M}
+    AI_MB=${AI_MB%m}
+    echo "[LineUpOS Init] Reserving ${AI_MB}MB for LineML via CMA..." > /dev/kmsg
+    
+    # CMA area já reservada no kernel config (CONFIG_CMA_SIZE_MBYTES=732)
+    # Apenas verifica se está disponível
+    if [ -f /sys/kernel/debug/cma/lineupos_ai/size_bytes ]; then
+        SIZE=$(cat /sys/kernel/debug/cma/lineupos_ai/size_bytes)
+        echo "[LineUpOS Init] CMA region lineupos_ai: $((SIZE / 1024 / 1024))MB" > /dev/kmsg
+    fi
+fi
+
+# Setup networking (minimal)
+ip link set lo up 2>/dev/null || true
+
+# Create IPC directories
+mkdir -p /run/lineupos
+chmod 1777 /run/lineupos
+
+# Start system logger
+syslogd -O /var/log/messages -s 256 -b 4 2>/dev/null || true
+klogd 2>/dev/null || true
+
+# Set hostname
+hostname lineupos 2>/dev/null || true
+
+# Mount API filesystems for userspace
+mount -t tmpfs tmpfs /run/user -o mode=0755 2>/dev/null || true
+mkdir -p /run/user/0
+chmod 700 /run/user/0
+
+# Export AI memory info for userspace
+if [ -n "$AI_MB" ]; then
+    echo "$AI_MB" > /run/lineupos/ai_memory_mb
+fi
+
+# Export GPU info
+lspci -nn 2>/dev/null | grep -i vga | head -1 > /run/lineupos/gpu_info || true
+
+echo "[LineUpOS Init] Starting userspace..." > /dev/kmsg
+
+# Execute Shell C# (compositor + display server)
+# Este é o PID 1 real do userspace
+exec /sbin/lineup-shell
+
+# Fallback se shell falhar
+echo "[LineUpOS Init] ERROR: Shell failed to start, dropping to shell" > /dev/kmsg
+exec /bin/sh
